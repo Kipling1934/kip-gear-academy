@@ -1,7 +1,7 @@
 #![no_std]
 
 use gmeta::{In, InOut, Metadata, Out};
-use gstd::{prelude::*, ActorId, PartialEq};
+use gstd::{prelude::*, ActorId, MessageId, PartialEq};
 
 pub struct ContractMetadata;
 
@@ -41,6 +41,7 @@ pub struct Session {
     pub session_status: SessionStatus,
     pub start_block_height: u32,
     pub attempts: u8,
+    pub msg_id: Option<MessageId>,
 }
 
 #[derive(Debug, Clone, Encode, Decode, TypeInfo)]
