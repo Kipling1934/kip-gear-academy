@@ -14,6 +14,7 @@ extern "C" fn init() {
         session_status: SessionStatus::Waiting,
         start_block_height: exec::block_height(),
         attempts: MaxTempt,
+        msg_id: None,
     };
     unsafe {
         SESSION = Some(session);
@@ -31,8 +32,9 @@ extern "C" fn handle() {
                 session.start_block_height = exec::block_height();
                 session.attempts = MaxTempt;
 
-                msg::send(session.target_program_id, Action::StartGame { user }, 0)
+                let msg_id = msg::send(session.target_program_id, Action::StartGame { user }, 0)
                     .expect("Error in sending a message");
+                session.msg_id = Some(msg_id);
                 session.session_status = SessionStatus::MessageSent;
                 unsafe {
                     SESSION = Some(session);
@@ -69,13 +71,13 @@ extern "C" fn handle() {
                     msg::reply(SessionEvent::GameStatus(current_game_status), 0)
                         .expect("Unable to reply");
                 } else {
-                    msg::send(
+                    let msg_id = msg::send(
                         session.target_program_id,
                         Action::CheckWord { user, word },
                         0,
                     )
                     .expect("Error in sending a message");
-                    session.attempts -= 1;
+                    session.msg_id = Some(msg_id);
                     session.session_status = SessionStatus::MessageSent;
                     unsafe {
                         SESSION = Some(session.clone());
@@ -170,7 +172,7 @@ extern "C" fn handle() {
                         0,
                     )
                     .expect("Error in sending a reply");
-
+                    session.attempts -= 1;
                     if session.attempts == 0 {
                         session.session_status = SessionStatus::GameEnded {
                             result: GameResult::Lose,
@@ -199,8 +201,15 @@ extern "C" fn handle_reply() {
     let reply_to = msg::reply_to().expect("Failed to query reply_to data");
     let session = unsafe { SESSION.as_mut().expect("Session is not initialized") };
     let event: Event = msg::load().expect("Unable to decode `Event`");
-    session.session_status = SessionStatus::MessageReceived(event);
-    exec::wake(reply_to).expect("Failed to wake up the message");
+
+    if let SessionStatus::MessageSent = session.session_status {
+        if let Some(msg_id) = session.msg_id {
+            if reply_to == msg_id {
+                session.session_status = SessionStatus::MessageReceived(event);
+                exec::wake(reply_to).expect("Failed to wake up the message");
+            }
+        }
+    }
 }
 
 #[no_mangle]
